@@ -1,0 +1,14 @@
+{
+  "product": "Custodia",
+  "sourceCommit": "4b09dc7adcb8a77c3da30c209e0c4b99d3f25c27",
+  "vercelProjectId": "prj_j7UXnne1U6gPPRzY73UyAJ92eLtN",
+  "rootDirectory": "enterprise",
+  "nodeVersion": "22.x",
+  "environmentKeysConfigured": [
+    "production",
+    "preview",
+    "development"
+  ],
+  "productionOrigin": "https://custodia-720studios.vercel.app",
+  "externalDependencies": "Awaiting real database, cache, OIDC, attestation and redaction worker configuration"
+}
