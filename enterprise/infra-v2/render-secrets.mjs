@@ -1,0 +1,6 @@
+import {writeFileSync} from 'node:fs';
+const region=process.env.AWS_REGION, arn=process.env.CUSTODIA_SECRET_ARN;
+if(!region || !/^[a-z]{2}-[a-z]+-\d$/.test(region) || !arn || !/^arn:aws:secretsmanager:[a-z0-9-]+:\d{12}:secret:[A-Za-z0-9/_+=.@-]+$/.test(arn))throw Error('Valid AWS_REGION and CUSTODIA_SECRET_ARN are required');
+const store={apiVersion:'external-secrets.io/v1',kind:'SecretStore',metadata:{name:'custodia-aws',namespace:'custodia'},spec:{provider:{aws:{service:'SecretsManager',region}}}};
+const secret={apiVersion:'external-secrets.io/v1',kind:'ExternalSecret',metadata:{name:'custodia-runtime',namespace:'custodia'},spec:{refreshInterval:'5m',secretStoreRef:{name:'custodia-aws',kind:'SecretStore'},target:{name:'custodia-runtime',creationPolicy:'Owner',deletionPolicy:'Retain'},dataFrom:[{extract:{key:arn}}]}};
+writeFileSync(process.argv[2]||'custodia-external-secrets.json',JSON.stringify({apiVersion:'v1',kind:'List',items:[store,secret,{...secret,metadata:{name:'custodia-attestation',namespace:'custodia'},spec:{...secret.spec,target:{name:'custodia-attestation',creationPolicy:'Owner',deletionPolicy:'Retain'},dataFrom:undefined,data:[{secretKey:'public-key.pem',remoteRef:{key:arn,property:'ATTESTATION_PUBLIC_KEY'}}]}}]},null,2)+'\n',{mode:0o600});

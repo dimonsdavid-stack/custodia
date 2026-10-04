@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.vercel/
+.env*
+*.tsbuildinfo
+__pycache__/
+*.pyc
+e2e-results/
+test-results/
+*.tfstate*
+.terraform/
+*.tfplan

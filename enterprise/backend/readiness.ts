@@ -1,0 +1,7 @@
+import {createClient} from 'redis';
+import {database} from './database';
+import {required,httpsUrl} from './config';
+import {containment} from './containment';
+let redis:ReturnType<typeof createClient>|undefined;
+async function cache(){if(!redis){const url=required('REDIS_URL');if(!url.startsWith('rediss://'))throw new Error('Redis TLS required');redis=createClient({url,socket:{connectTimeout:2000,reconnectStrategy:false}});redis.on('error',()=>console.error('{"event":"redis_error"}'));}if(!redis.isOpen)await redis.connect();return redis.ping();}
+export async function readiness(){const checks:Record<string,()=>Promise<unknown>>={postgres:()=>database().query('SELECT 1'),redis:cache,attestation:containment,proxy:async()=>{const response=await fetch(httpsUrl('VPC_PROXY_HEALTH_URL'),{signal:AbortSignal.timeout(2500),redirect:'error',cache:'no-store'});if(!response.ok)throw new Error('Proxy failed');}};const matrix:Record<string,{ok:boolean,latencyMs:number,error?:string}>=Object.fromEntries(await Promise.all(Object.entries(checks).map(async([name,fn])=>{const start=performance.now();try{await fn();return [name,{ok:true,latencyMs:Math.round((performance.now()-start)*1000)/1000}];}catch{return [name,{ok:false,latencyMs:Math.round((performance.now()-start)*1000)/1000,error:'Dependency verification failed'}];}})));const ok=Object.values(matrix).every(c=>c.ok);return {ok,matrix,at:new Date().toISOString()};}

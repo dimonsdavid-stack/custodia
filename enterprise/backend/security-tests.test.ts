@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {canonical,signature,transitions} from './database.ts';
+import {body,HttpError} from './config.ts';
+test('canonical ledger payload independent of insertion order',()=>{assert.equal(canonical({b:2,a:{d:4,c:3}}),canonical({a:{c:3,d:4},b:2}));});
+test('HMAC key strict and payload mutations change signature',()=>{process.env.LEDGER_HMAC_KEY='ab'.repeat(32);assert.notEqual(signature('first'),signature('changed'));process.env.LEDGER_HMAC_KEY='weak';assert.throws(()=>signature('data'));});
+test('release is terminal and intake cannot skip review',()=>{assert.deepEqual(transitions.released,[]);assert.equal(transitions.intake.includes('released'),false);});
+test('request body bounds and JSON parsing enforced',async()=>{await assert.rejects(body(new Request('https://custodia.test',{method:'POST',headers:{'content-type':'application/json'},body:'x'.repeat(65537)})),(e:unknown)=>e instanceof HttpError&&e.status===413);await assert.rejects(body(new Request('https://custodia.test',{method:'POST',headers:{'content-type':'application/json'},body:'broken'})),(e:unknown)=>e instanceof HttpError&&e.status===400);});
+import {seal,open,sessionToken} from './session.ts';
+test('encrypted session detects modification and expiry',()=>{process.env.SESSION_ENCRYPTION_KEY='cd'.repeat(32);const sealed=seal({accessToken:'private',expiresAt:Date.now()+10000});assert.equal(open(sealed).accessToken,'private');const data=Buffer.from(sealed,'base64url');data[30]^=1;assert.throws(()=>open(data.toString('base64url')));assert.throws(()=>sessionToken(new Request('https://custodia.test',{headers:{cookie:'__Host-custodia='+seal({accessToken:'private',expiresAt:Date.now()-1})}})));});

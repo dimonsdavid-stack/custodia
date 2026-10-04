@@ -1,0 +1,9 @@
+{
+  "campaign": "Custodia records operations technical assessment",
+  "messages": [
+    {"day": 0, "subject": "A measurable records workflow assessment", "body": "Custodia connects request intake, record review, redaction, deadline tracking, and evidence export in one operational workspace. We can map your current request process and calculate the time spent on handoffs using your own volumes and labor costs. Would a 20-minute workflow assessment be useful? We will distinguish measured results from estimates and document integration requirements before recommending a pilot."},
+    {"day": 7, "subject": "Your evidence trail and review bottlenecks", "body": "The assessment examines three engineering boundaries: which systems hold responsive records, who can approve a release, and how decisions remain traceable after export. Custodia's proposed deployment uses tenant-scoped storage and an append-only event ledger. We can review those controls with your security team and identify the actual work required for your environment."},
+    {"day": 14, "subject": "Close the loop on Custodia", "body": "If improving request throughput is on your roadmap, we can scope a pilot around one department and report baseline time, review effort, and completion outcomes. If timing is wrong, no response is necessary. You can also stop future messages using the unsubscribe link."}
+  ],
+  "assemblyRules": ["Prepend only verified prospect-specific observations with a recorded public source.", "Append the verified sender registration name and postal address.", "Include the recipient's signed one-click unsubscribe URL in the body and List-Unsubscribe header.", "Never claim a completed audit, SOC 2 certification, guaranteed savings, or performance benchmark without evidence."]
+}

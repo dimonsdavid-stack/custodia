@@ -1,0 +1,16 @@
+node_modules
+.next
+hardware/src
+hardware/Cargo.toml
+hardware/Dockerfile
+hardware/*.sh
+hardware/*.md
+workers
+infra
+infra-v2
+proxy
+e2e
+e2e-results
+test-results
+__pycache__
+*.tsbuildinfo

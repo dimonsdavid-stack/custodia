@@ -1,0 +1,5 @@
+import {writeFileSync} from 'node:fs';
+const vpc=process.env.CUSTODIA_VPC_CIDR,host=process.env.CUSTODIA_ENCLAVE_PARENT_CIDR;
+if(!vpc||!/^10\.\d{1,3}\.0\.0\/16$/.test(vpc)||!host||!/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}\/32$/.test(host))throw Error('Actual private VPC /16 and enclave parent /32 are required');
+const policy={apiVersion:'networking.k8s.io/v1',kind:'NetworkPolicy',metadata:{name:'custodia-cloud-dependencies',namespace:'custodia'},spec:{podSelector:{matchLabels:{app:'custodia'}},policyTypes:['Egress'],egress:[{to:[{ipBlock:{cidr:vpc}}],ports:[{protocol:'TCP',port:5432},{protocol:'TCP',port:6379}]},{to:[{ipBlock:{cidr:host}}],ports:[{protocol:'TCP',port:8443}]},{to:[{ipBlock:{cidr:'0.0.0.0/0',except:['0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12','192.168.0.0/16','224.0.0.0/4']}}],ports:[{protocol:'TCP',port:443}]}]}};
+const target=process.argv[2];if(!target)throw Error('Output path required');writeFileSync(target,JSON.stringify(policy,null,2)+'\n',{mode:0o600});

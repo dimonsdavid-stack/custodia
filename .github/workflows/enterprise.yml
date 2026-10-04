@@ -1,0 +1,197 @@
+name: Custodia enterprise verification and promotion
+on:
+  pull_request:
+    paths: ['enterprise/**', 'Dockerfile', '.dockerignore', '.github/workflows/enterprise.yml']
+  push:
+    branches: [main]
+    paths: ['enterprise/**', 'Dockerfile', '.dockerignore', '.github/workflows/enterprise.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: custodia-enterprise-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-isolated-ephemeral
+          POSTGRES_DB: custodia_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: enterprise
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: enterprise/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Validate migrations on an isolated database
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: ci-isolated-ephemeral
+          PGDATABASE: custodia_test
+        run: |
+          set -euo pipefail
+          for migration in migrations/*.sql; do psql -v ON_ERROR_STOP=1 -f "$migration"; done
+          psql -v ON_ERROR_STOP=1 -c "SELECT tablename FROM pg_tables WHERE schemaname='custodia' AND rowsecurity=true;"
+      - name: Validate shell scripts and immutable deployment renderer
+        run: |
+          bash -n infra/scripts/promote.sh
+          node --check infra/scripts/render-deployment.mjs
+          node infra/scripts/render-deployment.mjs stable ghcr.io/custodia/service@sha256:$(printf 'a%.0s' {1..64}) /tmp/deployment.json
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Terraform formatting and provider validation
+        run: |
+          terraform -chdir=infra/terraform fmt -recursive
+          terraform -chdir=infra/terraform init -backend=false
+          terraform -chdir=infra/terraform validate
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: enterprise
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+  sast:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3
+  image:
+    needs: [verify, sast, native-hardware-and-pdf]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.identity.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: repository
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/custodia" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.repository.outputs.name }}:${{ github.sha }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - id: identity
+        run: echo 'image=${{ steps.repository.outputs.name }}@${{ steps.build.outputs.digest }}' >> "$GITHUB_OUTPUT"
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.identity.outputs.image }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+  promote:
+    needs: image
+    if: github.ref == 'refs/heads/main' && vars.CUSTODIA_DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, linux, custodia-vpc]
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        region: [primary, secondary]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.CUSTODIA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ matrix.region == 'primary' && vars.CUSTODIA_PRIMARY_REGION || vars.CUSTODIA_SECONDARY_REGION }}
+      - name: Select private cluster
+        env:
+          CLUSTER_NAME: ${{ matrix.region == 'primary' && vars.CUSTODIA_PRIMARY_CLUSTER || vars.CUSTODIA_SECONDARY_CLUSTER }}
+        run: |
+          set -euo pipefail
+          test -n "$CLUSTER_NAME"
+          aws eks update-kubeconfig --name "$CLUSTER_NAME"
+      - name: Verify candidate and promote with rollback
+        env:
+          IMAGE_DIGEST: ${{ needs.image.outputs.image }}
+          READY_URL: ${{ matrix.region == 'primary' && vars.CUSTODIA_PRIMARY_CANDIDATE_READY_URL || vars.CUSTODIA_SECONDARY_CANDIDATE_READY_URL }}
+          PROMETHEUS_URL: ${{ matrix.region == 'primary' && vars.CUSTODIA_PRIMARY_PROMETHEUS_URL || vars.CUSTODIA_SECONDARY_PROMETHEUS_URL }}
+          PROMETHEUS_TOKEN: ${{ secrets.CUSTODIA_PROMETHEUS_TOKEN }}
+        run: bash enterprise/infra/scripts/promote.sh
+  native-hardware-and-pdf:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: enterprise
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Native binding compile and rejection tests
+        run: cargo test --manifest-path hardware/Cargo.toml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r workers/redaction/requirements.txt
+      - name: PDF destructive redaction tests
+        run: |
+          cd workers/redaction
+          python -m unittest test_engine.py
+  production-e2e:
+    if: github.event_name == 'workflow_dispatch' && vars.CUSTODIA_E2E_ENABLED == 'true'
+    runs-on: [self-hosted, linux, custodia-vpc]
+    environment: production
+    defaults:
+      run:
+        working-directory: enterprise
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Live identity, storage and tenant border verification
+        env:
+          CUSTODIA_E2E_ORIGIN: ${{ vars.CUSTODIA_E2E_ORIGIN }}
+          CUSTODIA_E2E_TOKEN_A: ${{ secrets.CUSTODIA_E2E_TOKEN_A }}
+          CUSTODIA_E2E_TOKEN_B: ${{ secrets.CUSTODIA_E2E_TOKEN_B }}
+          CUSTODIA_E2E_RECORD_A: ${{ vars.CUSTODIA_E2E_RECORD_A }}
+          CUSTODIA_E2E_RECORD_B: ${{ vars.CUSTODIA_E2E_RECORD_B }}
+          CUSTODIA_E2E_STORAGE_STATE: ${{ vars.CUSTODIA_E2E_STORAGE_STATE }}
+        run: npm run test:e2e

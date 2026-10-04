@@ -1,0 +1,9 @@
+BEGIN;
+CREATE TABLE custodia.connectors(tenant_id uuid NOT NULL,id uuid NOT NULL,provider text NOT NULL CHECK(provider IN ('graph','laserfiche')),config text NOT NULL,cursor text,version bigint NOT NULL DEFAULT 1,last_synced_at timestamptz,PRIMARY KEY(tenant_id,id));
+CREATE TABLE custodia.connector_items(tenant_id uuid NOT NULL,connector_id uuid NOT NULL,external_id text NOT NULL,payload text NOT NULL,content_hash text NOT NULL CHECK(length(content_hash)=64),deleted boolean NOT NULL DEFAULT false,updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,connector_id,external_id),FOREIGN KEY(tenant_id,connector_id) REFERENCES custodia.connectors(tenant_id,id));
+CREATE TABLE custodia.connector_audit(tenant_id uuid NOT NULL,id uuid NOT NULL,connector_id uuid NOT NULL,canonical text NOT NULL,signature text NOT NULL CHECK(length(signature)=64),key_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,id),FOREIGN KEY(tenant_id,connector_id) REFERENCES custodia.connectors(tenant_id,id));
+DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY['connectors','connector_items','connector_audit'] LOOP EXECUTE format('ALTER TABLE custodia.%I ENABLE ROW LEVEL SECURITY',t);EXECUTE format('ALTER TABLE custodia.%I FORCE ROW LEVEL SECURITY',t);EXECUTE format('CREATE POLICY tenant_isolation ON custodia.%I USING(tenant_id=nullif(current_setting(''app.current_tenant_id'',true),'''')::uuid) WITH CHECK(tenant_id=nullif(current_setting(''app.current_tenant_id'',true),'''')::uuid)',t);END LOOP;END $$;
+CREATE TRIGGER immutable_connector_audit BEFORE UPDATE OR DELETE OR TRUNCATE ON custodia.connector_audit FOR EACH STATEMENT EXECUTE FUNCTION custodia.reject_ledger_mutation();
+GRANT SELECT,INSERT,UPDATE ON custodia.connectors,custodia.connector_items TO custodia_app;
+GRANT SELECT,INSERT ON custodia.connector_audit TO custodia_app;
+COMMIT;

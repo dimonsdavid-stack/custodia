@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "initial": "discovered",
+  "terminal": ["closed", "suppressed"],
+  "nodes": {
+    "discovered": {"next": "enriched", "guard": "publicSourceAndContactBasisRecorded"},
+    "enriched": {"next": "qualified", "guard": "enrichmentVerifiedAndIntentEvidenceRecorded"},
+    "qualified": {"next": "drafted", "guard": "personalizationEvidenceRecorded"},
+    "drafted": {"next": "approved", "guard": "reviewerIdentityRecorded"},
+    "approved": {"next": "scheduled", "guard": "senderAuthenticationAndRegistrationVerified"},
+    "scheduled": {"next": "sent", "guard": "recipientTimingAndSuppressionChecked"},
+    "sent": {"next": "replied", "guard": "authenticatedProviderEventReceived"},
+    "replied": {"next": "meeting", "guard": "humanConfirmedPositiveIntent"},
+    "meeting": {"next": "closed", "guard": "outcomeRecorded"},
+    "closed": {"next": "suppressed", "guard": "optOutReceived"},
+    "suppressed": {"next": null, "guard": "neverSend"}
+  },
+  "globalInterrupt": {"event": "opt_out", "target": "suppressed", "priority": "highest"},
+  "delivery": {"enabledByDefault": false, "maxPerRecipientPerSevenDays": 1, "maxSequenceMessages": 3, "requireVerifiedSender": true, "requireOneClickUnsubscribe": true}
+}

@@ -1,0 +1,7 @@
+# Custodia outbound control
+
+`router.mjs` is a pure transition engine. It does not send mail, enrich contacts, scrape private systems, or infer that a deployment is authorized to communicate. The production worker must persist transitions and suppression records in tenant-scoped transactions, independently verify sender DNS and ownership, and supply the verified result to the engine. Sender boolean fields are evidence inputs from that worker, not DNS checks performed by this module.
+
+Apply the global suppression check immediately before every delivery, not only when drafting. Persist opt-outs before acknowledging the HTTPS POST unsubscribe handler. Bind the signed token to the tenant and lead and perform a tenant-scoped update. Implement RFC 8058 List-Unsubscribe-Post and List-Unsubscribe headers in the selected delivery provider. The opt-out operation must not require login or a confirmation page. Repeated opt-out calls must succeed idempotently.
+
+State-machine configuration and three finalized messages are supplied. Personalized claims require recorded source evidence and review. Classification is a deterministic triage helper: opt-out wins over positive terms, all positive results require human review. It is not a sentiment model. Recipient timing, send counts, provider event authentication, DNS verification, durable suppression and actual delivery remain integrations, and no campaign has been activated.

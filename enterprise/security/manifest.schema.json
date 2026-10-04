@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Custodia measured deployment policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issuer", "audience", "trustAnchors", "pcrs", "maxAgeSeconds", "debugAllowed"],
+  "properties": {
+    "issuer": {"type": "string", "format": "uri"},
+    "audience": {"const": "custodia-tenant-runtime"},
+    "trustAnchors": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^-----BEGIN PUBLIC KEY-----"}},
+    "pcrs": {"type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[0-9]+$"}, "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{96}$"}},
+    "maxAgeSeconds": {"type": "integer", "minimum": 10, "maximum": 120},
+    "debugAllowed": {"const": false}
+  }
+}

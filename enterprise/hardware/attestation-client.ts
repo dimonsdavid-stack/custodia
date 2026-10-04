@@ -1,0 +1,6 @@
+import {request} from 'node:https';
+import {required} from '../backend/config';
+export async function attestationRequest(url:URL):Promise<{payload:string,signature:string}>{
+ if(url.protocol!=='https:'||url.username||url.password)throw Error('Attestation HTTPS boundary rejected');
+ return new Promise((resolve,reject)=>{const req=request(url,{method:'GET',cert:required('ATTESTATION_CLIENT_CERT'),key:required('ATTESTATION_CLIENT_KEY'),ca:required('ATTESTATION_SERVER_CA'),rejectUnauthorized:true,minVersion:'TLSv1.3',headers:{Accept:'application/json','Cache-Control':'no-store'}},response=>{if(response.statusCode!==200){response.resume();reject(Error('Hardware attestation unavailable'));return;}const chunks:Buffer[]=[];let length=0;response.on('data',(chunk:Buffer)=>{length+=chunk.length;if(length>65536){req.destroy(Error('Attestation response bound exceeded'));return;}chunks.push(chunk);});response.on('error',reject);response.on('end',()=>{try{const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(typeof result.payload!=='string'||typeof result.signature!=='string')throw Error('Invalid native attestation assertion');resolve(result);}catch(e){reject(e);}});});const timeout=setTimeout(()=>req.destroy(Error('Hardware attestation deadline exceeded')),2500);req.on('close',()=>clearTimeout(timeout));req.on('error',reject);req.end();});
+}

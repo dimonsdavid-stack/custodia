@@ -1,0 +1,13 @@
+BEGIN;
+CREATE TABLE custodia.documents(tenant_id uuid NOT NULL,id uuid NOT NULL,request_id uuid NOT NULL,name text NOT NULL,mime text NOT NULL,key_id text NOT NULL,source_cipher bytea NOT NULL,sanitized_cipher bytea NOT NULL,source_sha256 text NOT NULL,sanitized_sha256 text NOT NULL,policy_cipher bytea NOT NULL,report jsonb NOT NULL,status text NOT NULL DEFAULT 'review' CHECK(status IN ('review','approved')),approved_by text,approved_at timestamptz,version bigint NOT NULL DEFAULT 1,created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,id),FOREIGN KEY(tenant_id,request_id) REFERENCES custodia.requests(tenant_id,id));
+ALTER TABLE custodia.documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE custodia.documents FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_documents ON custodia.documents USING(tenant_id=nullif(current_setting('app.current_tenant_id',true),'')::uuid) WITH CHECK(tenant_id=nullif(current_setting('app.current_tenant_id',true),'')::uuid);
+CREATE TABLE custodia.document_events(tenant_id uuid NOT NULL,id uuid NOT NULL,document_id uuid NOT NULL,actor text NOT NULL,event_type text NOT NULL,hash text NOT NULL,signed_payload text NOT NULL,key_id text NOT NULL,at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,id),FOREIGN KEY(tenant_id,document_id) REFERENCES custodia.documents(tenant_id,id));
+ALTER TABLE custodia.document_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE custodia.document_events FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_document_events ON custodia.document_events USING(tenant_id=nullif(current_setting('app.current_tenant_id',true),'')::uuid) WITH CHECK(tenant_id=nullif(current_setting('app.current_tenant_id',true),'')::uuid);
+CREATE TRIGGER immutable_document_events BEFORE UPDATE OR DELETE OR TRUNCATE ON custodia.document_events FOR EACH STATEMENT EXECUTE FUNCTION custodia.reject_ledger_mutation();
+GRANT SELECT,INSERT,UPDATE ON custodia.documents TO custodia_app;
+GRANT SELECT,INSERT ON custodia.document_events TO custodia_app;
+COMMIT;

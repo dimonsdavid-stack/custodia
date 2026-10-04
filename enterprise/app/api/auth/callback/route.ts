@@ -1,0 +1,3 @@
+import {finishLogin} from '../../../../backend/session';
+import {failure,required} from '../../../../backend/config';
+export async function GET(request:Request){try{const login=await finishLogin(request);const headers=new Headers({Location:required('PUBLIC_ORIGIN')+'/console','Cache-Control':'no-store'});headers.append('Set-Cookie',`__Host-custodia=${login.value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${login.maxAge}`);headers.append('Set-Cookie','__Host-custodia-login=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');return new Response(null,{status:302,headers});}catch(e){return failure(e);}}

@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.git
+**/.env*
+**/*.pem
+**/*.key
+**/terraform.tfstate*
+**/.terraform
+screenshots
+artifacts
+attachments
+upload

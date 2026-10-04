@@ -1,0 +1,6 @@
+import {createCipheriv,createDecipheriv,hkdfSync,randomBytes} from 'node:crypto';
+import {required} from '../backend/config';
+function master(id:string){const keys=JSON.parse(required('DOCUMENT_ENCRYPTION_KEYS'));const value=keys[id];if(typeof value!=='string'||!/^[a-f0-9]{64}$/i.test(value))throw Error('Document encryption key unavailable');return Buffer.from(value,'hex');}
+function key(id:string,tenant:string){return Buffer.from(hkdfSync('sha256',master(id),Buffer.from(tenant),Buffer.from('custodia-document-v1'),32));}
+export function encrypt(bytes:Buffer,tenant:string,documentId:string,kind:string,id:string){const nonce=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',key(id,tenant),nonce);cipher.setAAD(Buffer.from(JSON.stringify({tenant,documentId,kind,id})));const data=Buffer.concat([cipher.update(bytes),cipher.final()]);return Buffer.concat([nonce,cipher.getAuthTag(),data]);}
+export function decrypt(bytes:Buffer,tenant:string,documentId:string,kind:string,id:string){if(bytes.length<28)throw Error('Malformed ciphertext');const cipher=createDecipheriv('aes-256-gcm',key(id,tenant),bytes.subarray(0,12));cipher.setAAD(Buffer.from(JSON.stringify({tenant,documentId,kind,id})));cipher.setAuthTag(bytes.subarray(12,28));return Buffer.concat([cipher.update(bytes.subarray(28)),cipher.final()]);}

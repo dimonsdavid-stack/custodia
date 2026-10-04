@@ -1,0 +1,14 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {Policy,redactText,redactStructured,csvCell,utf8} from './sanitize.ts';
+import {encrypt,decrypt} from './crypto.ts';
+import {compileExport,flatten} from './export.ts';
+import ExcelJS from 'exceljs';
+const policy=Policy.parse({version:'test',identifiers:['ssn','email','ein'],literalTerms:['Sensitive Person']});
+test('redaction removes identifiers and normalizes disguised text',()=>{const result=redactText('Sensitive Person 123-45-6789 test@example.com 12-3456789 １２３-４５-６７８９',policy);assert.equal(result.count,5);assert.equal(result.text.includes('6789'),false);assert.equal(result.text.includes('@'),false);});
+test('structural fields and keys redact without prototype mutation',()=>{const result=redactStructured(JSON.parse('{"ssn":"secret","data":"123-45-6789","__proto__":{"password":"x"}}'),policy);assert.equal((result.value as Record<string,unknown>).ssn,'[REDACTED]');assert.equal(({} as Record<string,unknown>).password,undefined);assert.equal(JSON.stringify(result.value).includes('secret'),false);});
+test('tenant and object AES-GCM boundaries reject swapped ciphertext and modification',()=>{process.env.DOCUMENT_ENCRYPTION_KEYS=JSON.stringify({v1:'ab'.repeat(32)});const value=encrypt(Buffer.from('protected'),'tenant-a','doc-a','source','v1');assert.equal(decrypt(value,'tenant-a','doc-a','source','v1').toString(),'protected');assert.throws(()=>decrypt(value,'tenant-b','doc-a','source','v1'));assert.throws(()=>decrypt(value,'tenant-a','doc-b','source','v1'));value[value.length-1]^=1;assert.throws(()=>decrypt(value,'tenant-a','doc-a','source','v1'));});
+test('CSV formula injection is neutralized and quotes escaped',()=>{assert.equal(csvCell('=SUM(1,2)'),`"'=SUM(1,2)"`);assert.equal(csvCell('value"quote'), '"value""quote"');});
+test('binary malformed UTF-8 and oversized nesting rejected',()=>{assert.throws(()=>utf8(Buffer.from([0xff,0xfe])));let value:unknown='last';for(let n=0;n<40;n++)value={child:value};assert.throws(()=>redactStructured(value,policy));});
+test('XLSX output uses literal string cells rather than formulas',async()=>{const file=await compileExport({id:'doc',mime:'application/json',bytes:Buffer.from(JSON.stringify({value:'=HYPERLINK("https://example.com")'}))},'xlsx');const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(file.bytes as unknown as ExcelJS.Buffer);const value=workbook.worksheets[0].getCell('B2').value;assert.equal(typeof value,'string');assert.equal(String(value).startsWith('='),true);});
+test('JSON-LD and CSV export preserve sanitized values and hashes',async()=>{const document={id:'doc',mime:'text/plain',bytes:Buffer.from('[REDACTED]')};const json=await compileExport(document,'jsonld');assert.equal(JSON.parse(json.bytes.toString()).entries[0].value,'[REDACTED]');assert.equal(json.hash.length,64);assert.deepEqual(flatten({a:{b:3}}),[{path:'$/a/b',value:3}]);});

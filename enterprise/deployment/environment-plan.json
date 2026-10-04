@@ -1,0 +1,13 @@
+{
+  "projectName": "custodia",
+  "teamSlug": "720studios",
+  "repositoryRootDirectory": "enterprise",
+  "framework": "nextjs",
+  "nodeVersion": "22.x",
+  "environments": ["production", "preview", "development"],
+  "generatedSecretsPerEnvironment": ["SESSION_ENCRYPTION_KEY", "LEDGER_HMAC_KEY", "CONNECTOR_ENCRYPTION_KEY", "DOCUMENT_ENCRYPTION_KEYS"],
+  "generatedKeyIdentifiers": ["LEDGER_KEY_ID", "DOCUMENT_KEY_ID"],
+  "configureFromVerifiedDeployment": ["PUBLIC_ORIGIN"],
+  "externalDependencyValuesRequired": ["DATABASE_URL", "DATABASE_CA", "REDIS_URL", "OIDC_JWKS_URL", "OIDC_AUTHORIZATION_URL", "OIDC_TOKEN_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_LOGIN_SCOPES", "OIDC_ISSUER", "OIDC_AUDIENCE", "ATTESTATION_URL", "ATTESTATION_PUBLIC_KEY", "ATTESTATION_CLIENT_CERT", "ATTESTATION_CLIENT_KEY", "ATTESTATION_SERVER_CA", "ATTESTATION_ISSUER", "ATTESTATION_SUBJECT", "ATTESTATION_AUDIENCE", "ATTESTATION_PCRS", "VPC_PROXY_HEALTH_URL", "REDACTION_WORKER_URL", "REDACTION_CLIENT_CERT", "REDACTION_CLIENT_KEY", "REDACTION_SERVER_CA", "GRAPH_DOWNLOAD_HOSTS"],
+  "dependencyPolicy": "Leave unavailable dependencies unset and fail closed. Never reuse another project's database, credentials or encryption keys."
+}

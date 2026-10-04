@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {boundary,requestJson} from './transport';
+import {page} from './adapters';
+import {seal,unseal} from './store';
+test('connector rejects credential destination changes and insecure transport',()=>{for(const url of ['http://graph.microsoft.com/v1.0/drives/d/root/delta','https://evil.example/v1.0/drives/d/','https://graph.microsoft.com:444/v1.0/drives/d/','https://graph.microsoft.com/v1.0/drives/other/'])assert.throws(()=>boundary(url,'graph.microsoft.com','/v1.0/drives/d/'));});
+test('Graph pages use application token and reject poisoned cursor before retrieval',async()=>{let calls=0;const send:typeof fetch=async(_url,init)=>{calls++;if(calls===1){assert.equal(init?.method,'POST');return Response.json({access_token:'token',expires_in:3600});}assert.equal((init?.headers as Record<string,string>).Authorization,'Bearer token');return Response.json({value:[{id:'1',name:'record'}],'@odata.deltaLink':'https://graph.microsoft.com/v1.0/drives/d/root/delta?token=1'});};const result=await page({provider:'graph',directoryId:'11111111-1111-4111-8111-111111111111',clientId:'22222222-2222-4222-8222-222222222222',clientSecret:'testsecret',driveId:'d'},null,send);assert.equal(result.items.length,1);assert.equal(result.complete,true);});
+test('encrypted config is tenant and purpose bound',()=>{process.env.CONNECTOR_ENCRYPTION_KEY='13'.repeat(32);const encrypted=seal({secret:'private'},'tenant:a:config');assert.deepEqual(unseal(encrypted,'tenant:a:config'),{secret:'private'});assert.throws(()=>unseal(encrypted,'tenant:b:config'));});
+test('bounded retries honor throttling and refuse redirects',async()=>{let calls=0;const send:typeof fetch=async(_url,init)=>{assert.equal(init?.redirect,'error');calls++;return calls===1?new Response('',{status:429,headers:{'Retry-After':'0'}}):Response.json({value:[]});};assert.deepEqual(await requestJson(new URL('https://graph.microsoft.com/v1.0/'),{},send),{value:[]});assert.equal(calls,2);});
+import {publicIPv4} from './content.ts';
+test('binary import DNS pins only public IPv4 destinations',()=>{for(const ip of ['127.0.0.1','169.254.169.254','10.1.2.3','192.168.1.1','172.16.0.1','100.64.1.2','198.18.0.1','999.1.1.1'])assert.equal(publicIPv4(ip),false);assert.equal(publicIPv4('8.8.8.8'),true);});
